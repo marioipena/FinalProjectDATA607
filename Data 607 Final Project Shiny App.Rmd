@@ -1,0 +1,189 @@
+---
+title: "data607finalprojectShinyApp"
+author: "Ajay Arora and Mario Pena"
+date: "November 25, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+#install.packages( "maps", dependencies = TRUE) #run this to install R package maps
+ ################################- warning this will update existing packages if already installed
+
+#*save the following code in a file named app.R *
+```{r}
+ library(shiny)
+ library(maps)
+library(DBI)
+library(data.tree)
+```
+##Section 1 ____________________________________________________
+
+ #load your data or create a data table as follows:
+ 
+```{r} 
+
+cn <- dbConnect(drv      = RMySQL::MySQL(), 
+                username = "admin", 
+                password = "Data__607", 
+                host     = "database-1.cxdov2mcmzlo.us-east-2.rds.amazonaws.com", 
+                port     = 3306, 
+                dbname   = "data607finalproject")
+
+
+data2 <- dbGetQuery(cn, "SELECT v.MAKED
+		, v.YEAR
+		, v.BODYD
+		, o.OCCLOCD
+		, o.HIC AS HIC
+		, o.LFEM AS LFL
+		, o.RFEM AS RFL
+		
+  FROM data607finalproject.test t
+  inner join data607finalproject.veh v
+  on(v.TSTNO = t.TSTNO)
+  inner join data607finalproject.occ o
+  on(o.TSTNO = v.TSTNO)
+  inner join data607finalproject.rest r
+  on(r.TSTNO = t.TSTNO)
+WHERE v.MAKED != 'NHTSA' 
+	AND v.MAKED NOT IN ('MCI', 'OTHER') 
+	AND  (o.LFEM != '' AND o.LFEM != 0) 
+	AND (o.RFEM != '' AND o.RFEM != 0)
+	AND (r.DEPLOYD = N'DEPLOYED PROPERLY')
+	AND (o.HIC != '' AND o.HIC != 0)
+	AND (v.YEAR != 0 and v.YEAR != '')
+GROUP BY
+v.MAKED
+		, v.YEAR
+		, v.BODYD
+		, o.OCCLOCD
+		, o.HIC 
+		, o.LFEM 
+		, o.RFEM 
+ORDER BY v.MAKED ")
+```
+
+
+
+```{r}
+vehicleData = (data2)
+displayData = data2
+ # countyData = read.table(
+ # text = "State County
+ # Delaware Kent
+ # Delaware 'New Castle'
+ # Delaware Sussex
+ # 'Rhode Island' Bristol
+ # 'Rhode Island' Kent
+ # 'Rhode Island' Newport
+ # 'Rhode Island' Providence
+ # 'Rhode Island' Washington",
+ # header = TRUE, stringsAsFactors = FALSE)
+
+
+
+
+##Section 2 ____________________________________________________
+ #set up the user interface
+ 
+ 
+
+ ui = shinyUI(
+ fluidPage( #allows layout to fill browser window
+ titlePanel("Interactive Vehicle Injury Selector"),
+ #adds a title to page and browser tab
+ #-use "title = 'tab name'" to name browser tab
+ sidebarPanel( #designates location of following items
+ htmlOutput("year_selector"),#add selectinput boxs
+ htmlOutput("make_selector")# from objects created in server
+ ),
+mainPanel(
+ #plotOutput("plot1") #put plot item in main area
+  tableOutput("view")
+  
+  
+           )
+       ) )
+ 
+ 
+ 
+ ##Section 3 ____________________________________________________
+ 
+ 
+ #server controls what is displayed by the user interface
+ 
+ 
+ 
+ server = shinyServer(function(input, output) {
+ #creates logic behind ui outputs ** pay attention to letter case in names
+
+  output$year_selector = renderUI({ #creates Year select box object called in ui
+   selectInput(inputId = "YEAR", #name of input
+   label = "Year:", #label displayed in ui
+   choices = as.character(unique(vehicleData$YEAR)),
+   # calls unique values from the State column in the previously created table
+   selected = "2019") #default choice (not required)
+   })
+   output$make_selector = renderUI({#creates County select box object called in ui
+  
+  data_available = vehicleData[vehicleData$YEAR == input$YEAR, "MAKED"]
+   #creates a reactive list of available counties based on the State selection made
+  
+  selectInput(inputId = "MAKED", #name of input
+   label = "MAKE:", #label displayed in ui
+   choices = unique(data_available), #calls list of available counties
+   selected = unique(data_available)[1])
+
+  
+  
+  
+     })
+  
+   
+  # output$plot1 = renderPlot({ #creates a the plot to go in the mainPanel
+  #  map('MAKED', region = input$YEAR)
+  #  #uses the map function based on the state selected
+  #  map('MAKED', region = paste(input$YEAR,input$MAKED, sep=','),
+  #  add = T, fill = T, col = 'red')
+  #  #adds plot of the selected county filled in red
+  #  })
+   
+   # output$plot1 = renderPlot({
+   #   
+   #   displayData$pathString <- paste("Vehicle_Stats", 
+   #                          input$YEAR, 
+   #                          input$MAKED, 
+   #                          data2$BODYD,
+   #                          data2$OCCLOCD,
+   #                          sep = "/")
+   # 
+   #          data2tree <- as.Node(displayData)
+   # 
+   #          #plot(data2tree)
+   #          #print(data2tree, "HIC", "LFL", "RFL")            
+   #          #tableOutput(print(data2tree, "HIC", "LFL", "RFL"))
+   #      })
+   
+   
+     output$view <- renderTable({
+     displayData$pathString <- paste("Vehicle_Stats", 
+                            input$YEAR, 
+                            input$MAKED, 
+                            data2$BODYD,
+                            data2$OCCLOCD,
+                            sep = "/")
+
+            data2tree <- as.Node(displayData)
+        (print(data2tree, "HIC", "LFL", "RFL"))
+      })
+ })#close the shinyServer
+
+ 
+##Section 4____________________________________________________
+ shinyApp(ui = ui, server = server) #need this if combining ui and server into one file.
+```
